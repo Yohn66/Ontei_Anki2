@@ -2,17 +2,71 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>度数計算</title>
+  <!-- PWA関連 -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#3b82f6">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="度数計算">
+  <link rel="apple-touch-icon" href="icons/icon-192x192.png">
+  
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- React関連ライブラリ -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <style>
+    /* PWAでのiOSのスタイル調整 */
+    html, body {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      overscroll-behavior-y: contain;
+    }
+    
+    /* ダブルタップによるズームを防止 */
+    * { 
+      touch-action: manipulation;
+    }
+    
+    /* ホーム画面追加プロンプト */
+    #pwa-install-prompt {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: white;
+      padding: 15px;
+      box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+      z-index: 1000;
+      display: none;
+    }
+  </style>
 </head>
 <body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
   <div id="app" class="container mx-auto max-w-md"></div>
+  
+  <!-- ホーム画面追加プロンプト -->
+  <div id="pwa-install-prompt">
+    <div class="flex justify-between items-center">
+      <div>
+        <p class="font-bold">度数計算アプリをインストール</p>
+        <p class="text-sm">ホーム画面に追加して、アプリとして使用できます</p>
+      </div>
+      <div>
+        <button id="pwa-install-button" class="bg-blue-500 text-white px-4 py-2 rounded">追加</button>
+        <button id="pwa-dismiss-button" class="ml-2 px-4 py-2 border rounded">あとで</button>
+      </div>
+    </div>
+  </div>
+  
   <!-- スクリプトを直接埋め込み -->
   <script type="text/babel">
     // 音と数字のマッピング
@@ -611,6 +665,110 @@
     // React 18の新しいレンダリング方法
     const root = ReactDOM.createRoot(document.getElementById('app'));
     root.render(<MusicTheoryQuiz />);
+  </script>
+  
+  <!-- Service Worker 登録スクリプト -->
+  <script>
+    // Service Workerのサポートをチェック
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => {
+            console.log('Service Worker 登録成功:', reg.scope);
+          })
+          .catch(err => {
+            console.log('Service Worker 登録失敗:', err);
+          });
+      });
+    }
+    
+    // PWAインストールプロンプトの変数
+    let deferredPrompt;
+    const pwaInstallPrompt = document.getElementById('pwa-install-prompt');
+    const pwaInstallButton = document.getElementById('pwa-install-button');
+    const pwaDismissButton = document.getElementById('pwa-dismiss-button');
+    
+    // beforeinstallpromptイベントをキャプチャ
+    window.addEventListener('beforeinstallprompt', (e) => {
+      // デフォルトのプロンプト表示を防止
+      e.preventDefault();
+      // 後で使用するためにイベントを保存
+      deferredPrompt = e;
+      
+      // iOS Safariなど、"beforeinstallprompt"をサポートしていないブラウザでは
+      // イベントは発生せず、deferredPromptはundefinedのままになります
+      
+      // 既にPWAとして動作しているか確認
+      if (!window.matchMedia('(display-mode: standalone)').matches) {
+        // カスタムプロンプトを表示（スタンドアロンでなければ）
+        pwaInstallPrompt.style.display = 'block';
+      }
+    });
+    
+    // インストールボタンのクリックイベント
+    pwaInstallButton.addEventListener('click', () => {
+      // プロンプトが保存されていれば表示
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        
+        // ユーザーの選択結果を待つ
+        deferredPrompt.userChoice.then((choiceResult) => {
+          if (choiceResult.outcome === 'accepted') {
+            console.log('ユーザーがPWAのインストールを承諾しました');
+          } else {
+            console.log('ユーザーがPWAのインストールを拒否しました');
+          }
+          // イベントは一度しか使えないので、nullに設定
+          deferredPrompt = null;
+        });
+      }
+      
+      // カスタムプロンプトを非表示
+      pwaInstallPrompt.style.display = 'none';
+    });
+    
+    // 後でボタンのクリックイベント
+    pwaDismissButton.addEventListener('click', () => {
+      // カスタムプロンプトを非表示
+      pwaInstallPrompt.style.display = 'none';
+      
+      // 24時間後に再表示するためにローカルストレージに保存
+      localStorage.setItem('pwaPromptDismissed', Date.now().toString());
+    });
+    
+    // iOS向けの特別処理
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    
+    if (isIOS && !window.matchMedia('(display-mode: standalone)').matches) {
+      // iOSでは独自のインストールプロンプトを表示
+      const iOSPrompt = document.createElement('div');
+      iOSPrompt.innerHTML = `
+        <div id="ios-prompt" style="position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 15px; box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1); z-index: 1000;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <p style="font-weight: bold;">度数計算アプリをインストール</p>
+              <p style="font-size: 14px;">「ホーム画面に追加」ボタンからインストールできます</p>
+              <p style="font-size: 12px; margin-top: 5px;">↓シェアボタンをタップ→「ホーム画面に追加」を選択</p>
+            </div>
+            <button id="ios-dismiss" style="padding: 5px 10px; border: 1px solid #ccc; border-radius: 5px;">閉じる</button>
+          </div>
+        </div>
+      `;
+      
+      // 既に表示したことがあるか確認
+      const hasPrompted = localStorage.getItem('iosPromptShown');
+      
+      if (!hasPrompted) {
+        // 初回表示の場合
+        document.body.appendChild(iOSPrompt);
+        localStorage.setItem('iosPromptShown', 'true');
+        
+        // 閉じるボタンのイベント
+        document.getElementById('ios-dismiss').addEventListener('click', () => {
+          document.getElementById('ios-prompt').style.display = 'none';
+        });
+      }
+    }
   </script>
 </body>
 </html>
