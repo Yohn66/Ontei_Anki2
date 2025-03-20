@@ -48,12 +48,32 @@
       z-index: 1000;
       display: none;
     }
+
+    /* iOS用インストールガイド */
+    #ios-install-guide {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: white;
+      padding: 15px;
+      box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+      z-index: 1000;
+      display: none;
+    }
+
+    /* インストール済みの場合のスタイル調整 */
+    @media (display-mode: standalone) {
+      .pwa-only-hide {
+        display: none !important;
+      }
+    }
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
   <div id="app" class="container mx-auto max-w-md"></div>
   
-  <!-- ホーム画面追加プロンプト -->
+  <!-- Android用ホーム画面追加プロンプト -->
   <div id="pwa-install-prompt">
     <div class="flex justify-between items-center">
       <div>
@@ -64,6 +84,18 @@
         <button id="pwa-install-button" class="bg-blue-500 text-white px-4 py-2 rounded">追加</button>
         <button id="pwa-dismiss-button" class="ml-2 px-4 py-2 border rounded">あとで</button>
       </div>
+    </div>
+  </div>
+
+  <!-- iOS用インストールガイド -->
+  <div id="ios-install-guide">
+    <div class="flex justify-between items-center">
+      <div>
+        <p class="font-bold">度数計算アプリをインストール</p>
+        <p class="text-sm">1. 下部の<span class="inline-block"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 4V16M12 16L6 10M12 16L18 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>をタップ</p>
+        <p class="text-sm">2.「ホーム画面に追加」を選択</p>
+      </div>
+      <button id="ios-guide-dismiss" class="px-4 py-2 border rounded">閉じる</button>
     </div>
   </div>
   
@@ -687,6 +719,8 @@
     const pwaInstallPrompt = document.getElementById('pwa-install-prompt');
     const pwaInstallButton = document.getElementById('pwa-install-button');
     const pwaDismissButton = document.getElementById('pwa-dismiss-button');
+    const iosInstallGuide = document.getElementById('ios-install-guide');
+    const iosGuideDismissButton = document.getElementById('ios-guide-dismiss');
     
     // beforeinstallpromptイベントをキャプチャ
     window.addEventListener('beforeinstallprompt', (e) => {
@@ -694,9 +728,6 @@
       e.preventDefault();
       // 後で使用するためにイベントを保存
       deferredPrompt = e;
-      
-      // iOS Safariなど、"beforeinstallprompt"をサポートしていないブラウザでは
-      // イベントは発生せず、deferredPromptはundefinedのままになります
       
       // 既にPWAとして動作しているか確認
       if (!window.matchMedia('(display-mode: standalone)').matches) {
@@ -740,35 +771,22 @@
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     
     if (isIOS && !window.matchMedia('(display-mode: standalone)').matches) {
-      // iOSでは独自のインストールプロンプトを表示
-      const iOSPrompt = document.createElement('div');
-      iOSPrompt.innerHTML = `
-        <div id="ios-prompt" style="position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 15px; box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1); z-index: 1000;">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <p style="font-weight: bold;">度数計算アプリをインストール</p>
-              <p style="font-size: 14px;">「ホーム画面に追加」ボタンからインストールできます</p>
-              <p style="font-size: 12px; margin-top: 5px;">↓シェアボタンをタップ→「ホーム画面に追加」を選択</p>
-            </div>
-            <button id="ios-dismiss" style="padding: 5px 10px; border: 1px solid #ccc; border-radius: 5px;">閉じる</button>
-          </div>
-        </div>
-      `;
+      // iOSではカスタムガイドを表示
+      const lastPrompted = localStorage.getItem('iosPromptShown');
+      const lastPromptedTime = lastPrompted ? parseInt(lastPrompted) : 0;
+      const dayInMs = 24 * 60 * 60 * 1000;
       
-      // 既に表示したことがあるか確認
-      const hasPrompted = localStorage.getItem('iosPromptShown');
-      
-      if (!hasPrompted) {
-        // 初回表示の場合
-        document.body.appendChild(iOSPrompt);
-        localStorage.setItem('iosPromptShown', 'true');
-        
-        // 閉じるボタンのイベント
-        document.getElementById('ios-dismiss').addEventListener('click', () => {
-          document.getElementById('ios-prompt').style.display = 'none';
-        });
+      // 24時間以上経過していれば表示
+      if (!lastPrompted || (Date.now() - lastPromptedTime > dayInMs)) {
+        iosInstallGuide.style.display = 'block';
+        localStorage.setItem('iosPromptShown', Date.now().toString());
       }
     }
+    
+    // iOSプロンプト閉じるボタン
+    iosGuideDismissButton.addEventListener('click', () => {
+      iosInstallGuide.style.display = 'none';
+    });
   </script>
 </body>
 </html>
